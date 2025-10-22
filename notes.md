@@ -1,123 +1,123 @@
-# State-Space Models: From HiPPO to Mamba
+# State-Space Models: От HiPPO к Mamba
 
-## Abstract
+## Аннотация
 
-This lecture presents a comprehensive overview of State-Space Models (SSMs) in deep learning, tracing their evolution from the foundational HiPPO framework to the modern Mamba architecture. We begin with the mathematical foundations of polynomial projections and optimal memory mechanisms, then explore how these concepts were adapted into efficient sequence modeling architectures. The lecture covers three main developments: HiPPO's recurrent memory with optimal polynomial projections, the transition to structured state-space layers (LSSL, S4, DSS, S4D), and finally the selective state-space models exemplified by Mamba. Throughout, we examine both theoretical foundations and practical implementations, highlighting how these models achieve linear-time complexity while maintaining competitive performance with Transformers on various sequence modeling tasks.
+Данная лекция представляет всесторонний обзор State-Space Models (SSMs) в глубоком обучении, прослеживая их эволюцию от основополагающего фреймворка HiPPO до современной архитектуры Mamba. Мы начинаем с математических основ полиномиальных проекций и оптимальных механизмов памяти, затем исследуем, как эти концепции были адаптированы в эффективные архитектуры для моделирования последовательностей. Лекция охватывает три основных развития: рекуррентную память HiPPO с оптимальными полиномиальными проекциями, переход к структурированным слоям пространства состояний (LSSL, S4, DSS, S4D), и наконец, селективные модели пространства состояний, воплощенные в Mamba. На протяжении всего изложения мы рассматриваем как теоретические основы, так и практические реализации, подчеркивая, как эти модели достигают линейной временной сложности, сохраняя при этом конкурентоспособную производительность с Transformers на различных задачах моделирования последовательностей.
 
-## Table of Contents
+## Содержание
 
-1. [Mathematical Prerequisites](#mathematical-prerequisites)
-2. [HiPPO: Recurrent Memory with Optimal Polynomial Projections](#hippo-recurrent-memory-with-optimal-polynomial-projections)
-3. [State-Space Models: From Theory to Practice](#state-space-models-from-theory-to-practice)
-4. [Mamba: Selective State Spaces](#mamba-selective-state-spaces)
-5. [Conclusion](#conclusion)
+1. [Математические предпосылки](#математические-предпосылки)
+2. [HiPPO: Рекуррентная память с оптимальными полиномиальными проекциями](#hippo-рекуррентная-память-с-оптимальными-полиномиальными-проекциями)
+3. [State-Space Models: От теории к практике](#state-space-models-от-теории-к-практике)
+4. [Mamba: Селективные пространства состояний](#mamba-селективные-пространства-состояний)
+5. [Заключение](#заключение)
 
 ---
 
-## Mathematical Prerequisites
+## Математические предпосылки
 
-### Functional Analysis Foundations
+### Основы функционального анализа
 
-Before diving into State-Space Models, we need to establish the mathematical foundations that make these architectures possible. The key concepts involve:
+Прежде чем погрузиться в State-Space Models, необходимо установить математические основы, которые делают эти архитектуры возможными. Ключевые концепции включают:
 
-**Basis Expansion in Vector Spaces**
+**Разложение по базису в векторных пространствах**
 
-Consider a vector space $V(\mathbb{R})$ with a basis $B = \{\vec{b}_1, \ldots, \vec{b}_N\}$. Any vector $\vec{a} \in V$ can be expressed as:
+Рассмотрим векторное пространство $V(\mathbb{R})$ с базисом $B = \{\vec{b}_1, \ldots, \vec{b}_N\}$. Любой вектор $\vec{a} \in V$ может быть выражен как:
 
 $$\vec{a} = c_1\vec{b}_1 + \ldots + c_N\vec{b}_N$$
 
-where $\vec{c} = (c_1, \ldots, c_N)$ is the coordinate vector representing $\vec{a}$ in the basis $B$.
+где $\vec{c} = (c_1, \ldots, c_N)$ — это вектор координат, представляющий $\vec{a}$ в базисе $B$.
 
-If the basis is orthonormal:
+Если базис ортонормированный:
 $$\langle \vec{b}_i, \vec{b}_j \rangle = \begin{cases} 1, & i = j \\ 0, & i \neq j \end{cases}$$
 
-then the coefficients can be computed as:
+то коэффициенты могут быть вычислены как:
 $$c_n = \langle \vec{a}, \vec{b}_n \rangle$$
 
-**Function Spaces and Orthonormal Bases**
+**Функциональные пространства и ортонормированные базисы**
 
-The same principles extend to function spaces. For functions $f, g \in L^2[-1,1]$, we define the inner product as:
+Те же принципы распространяются на функциональные пространства. Для функций $f, g \in L^2[-1,1]$ мы определяем скалярное произведение как:
 
 $$\langle f, g \rangle = \int_{-1}^1 f(x)g(x) w(x) dx$$
 
-where $w(x)$ is a weight function. Common orthonormal polynomial bases include:
+где $w(x)$ — весовая функция. Общие ортонормированные полиномиальные базисы включают:
 
-- **Legendre polynomials**: $L^2[-1,1]$ with $w(x) = 1$
-- **Laguerre polynomials**: $L^2[0,+\infty)$ with $w(x) = e^{-x}$
-- **Chebyshev polynomials**: $L^2[-1,1]$ with $w(x) = \frac{1}{\sqrt{1-x^2}}$
-- **Hermite polynomials**: $L^2(-\infty,+\infty)$ with $w(x) = e^{-x^2}$
+- **Полиномы Лежандра**: $L^2[-1,1]$ с $w(x) = 1$
+- **Полиномы Лагера**: $L^2[0,+\infty)$ с $w(x) = e^{-x}$
+- **Полиномы Чебышева**: $L^2[-1,1]$ с $w(x) = \frac{1}{\sqrt{1-x^2}}$
+- **Полиномы Эрмита**: $L^2(-\infty,+\infty)$ с $w(x) = e^{-x^2}$
 
-**Function Approximation**
+**Аппроксимация функций**
 
-For any function $f(x) \in L^2[-1,1]$ and orthonormal basis $\{P_n(x)\}_{n=1}^\infty$, the optimal approximation is:
+Для любой функции $f(x) \in L^2[-1,1]$ и ортонормированного базиса $\{P_n(x)\}_{n=1}^\infty$ оптимальная аппроксимация:
 
 $$f(x) = \sum_{n=1}^\infty c_n P_n(x) \approx \sum_{n=1}^N c_n P_n(x)$$
 
-where the coefficients form a feature representation:
+где коэффициенты образуют признаковое представление:
 $$c_n = \langle f(x), P_n(x) \rangle = \int_{-1}^1 f(x)P_n(x)w(x)dx$$
 
-### Differential Equations and Numerical Integration
+### Дифференциальные уравнения и численное интегрирование
 
-**Ordinary Differential Equations**
+**Обыкновенные дифференциальные уравнения**
 
-ODEs describe system dynamics:
+ОДУ описывают динамику системы:
 $$\frac{d}{dt}x(t) = f(x(t), t)$$
 
-Solving ODEs (numerically or analytically) is called integration.
+Решение ОДУ (численно или аналитически) называется интегрированием.
 
-**Forward Euler Method**
+**Метод Эйлера**
 
-The simplest numerical integration scheme:
+Простейшая схема численного интегрирования:
 $$\frac{x(t+dt) - x(t)}{dt} = f(x(t), t)$$
 
-This gives us the recurrence relation:
+Это дает нам рекуррентное соотношение:
 $$x_{k+1} = x_k + f(x_k, k)dt$$
 
-where $dt$ is the discretization step.
+где $dt$ — шаг дискретизации.
 
-**Other Integration Methods**
+**Другие методы интегрирования**
 
-- **Backward Euler**: $\bar{A} = (I - Adt)^{-1}$, $\bar{B} = (I - Adt)^{-1}Bdt$
-- **Bilinear method**: $\bar{A} = \left(I - A\frac{dt}{2}\right)^{-1}\left(I + A\frac{dt}{2}\right)$
+- **Обратный Эйлер**: $\bar{A} = (I - Adt)^{-1}$, $\bar{B} = (I - Adt)^{-1}Bdt$
+- **Билинейный метод**: $\bar{A} = \left(I - A\frac{dt}{2}\right)^{-1}\left(I + A\frac{dt}{2}\right)$
 - **Zero-order hold (ZOH)**: $\bar{A} = e^{Adt}$, $\bar{B} = (\bar{A} - I)A^{-1}B$
 
 ---
 
-## HiPPO: Recurrent Memory with Optimal Polynomial Projections
+## HiPPO: Рекуррентная память с оптимальными полиномиальными проекциями
 
-### Core Concepts
+### Основные концепции
 
-HiPPO (High Order Polynomial Projections) introduces a revolutionary approach to recurrent memory by using expansion coefficients as memory states. The key insight is treating univariate time series as continuous functions and using polynomial projections to compress historical information optimally.
+HiPPO (High Order Polynomial Projections) вводит революционный подход к рекуррентной памяти, используя коэффициенты разложения как состояния памяти. Ключевая идея заключается в том, чтобы рассматривать одномерные временные ряды как непрерывные функции и использовать полиномиальные проекции для оптимального сжатия исторической информации.
 
-**The HiPPO Framework**
+**Фреймворк HiPPO**
 
-1. **Univariate Function Representation**: Each time series is viewed as a continuous function $f(t)$
-2. **Expansion Coefficients as Memory**: Instead of storing raw history, we store coefficients $c(t)$ of polynomial expansion
-3. **Recurrent Memory as ODE Dynamics**: The coefficients evolve according to differential equations
-4. **Numerical Solution**: Use numerical integration to update memory states
+1. **Представление одномерной функции**: Каждый временной ряд рассматривается как непрерывная функция $f(t)$
+2. **Коэффициенты разложения как память**: Вместо хранения сырой истории мы храним коэффициенты $c(t)$ полиномиального разложения
+3. **Рекуррентная память как динамика ОДУ**: Коэффициенты эволюционируют согласно дифференциальным уравнениям
+4. **Численное решение**: Используем численное интегрирование для обновления состояний памяти
 
-### Mathematical Formulation
+### Математическая формулировка
 
-For a function $f(t)$ defined on $[0, \tau]$, we seek to approximate it using polynomial basis functions. The optimal coefficients $c(t)$ satisfy:
+Для функции $f(t)$, определенной на $[0, \tau]$, мы стремимся аппроксимировать её, используя полиномиальные базисные функции. Оптимальные коэффициенты $c(t)$ удовлетворяют:
 
 $$\frac{d}{dt}c(t) = Ac(t) + Bf(t)$$
 
-where $A$ and $B$ are matrices determined by the chosen polynomial basis and integration method.
+где $A$ и $B$ — матрицы, определяемые выбранным полиномиальным базисом и методом интегрирования.
 
-**Discretization**
+**Дискретизация**
 
-Applying numerical integration (e.g., Forward Euler):
+Применяя численное интегрирование (например, метод Эйлера):
 $$c_{n+1} = c_n + (Ac_n + Bf_n)dt = (I + Adt)c_n + (Bdt)f_n$$
 
-Letting $\bar{A} = I + Adt$ and $\bar{B} = Bdt$, we get:
+Полагая $\bar{A} = I + Adt$ и $\bar{B} = Bdt$, получаем:
 $$c_{n+1} = \bar{A}c_{n-1} + \bar{B}f_n$$
 
-### HiPPO Instantiations
+### Реализации HiPPO
 
 **Translated Legendre (LegT)**
-- Space: $L^2[\tau-\theta, \tau]$ (sliding window)
-- Weight function: $w(t) = \frac{1}{\theta}[\tau-\theta \leq t \leq \tau]$
-- Matrix elements:
+- Пространство: $L^2[\tau-\theta, \tau]$ (скользящее окно)
+- Весовая функция: $w(t) = \frac{1}{\theta}[\tau-\theta \leq t \leq \tau]$
+- Элементы матрицы:
   $$A_{nk} = \frac{1}{\theta}\begin{cases}
   (-1)^{n-k}(2n+1), & n \geq k \\
   2n+1, & n \leq k
@@ -125,9 +125,9 @@ $$c_{n+1} = \bar{A}c_{n-1} + \bar{B}f_n$$
   $$B_n = \frac{1}{\theta}(2n+1)(-1)^n$$
 
 **Translated Laguerre (LagT)**
-- Space: $L^2[-\infty, \tau]$ (exponential weighting)
-- Weight function: $w(t) = \exp(t-\tau)[t \leq \tau]$
-- Matrix elements:
+- Пространство: $L^2[-\infty, \tau]$ (экспоненциальное взвешивание)
+- Весовая функция: $w(t) = \exp(t-\tau)[t \leq \tau]$
+- Элементы матрицы:
   $$A_{nk} = \begin{cases}
   1, & n \geq k \\
   0, & n < k
@@ -135,9 +135,9 @@ $$c_{n+1} = \bar{A}c_{n-1} + \bar{B}f_n$$
   $$B_n = 1$$
 
 **Scaled Legendre (LegS)**
-- Space: $L^2[0, \tau]$ (full history)
-- Weight function: $w(t) = \frac{1}{\tau}[0 \leq t \leq \tau]$
-- Matrix elements:
+- Пространство: $L^2[0, \tau]$ (полная история)
+- Весовая функция: $w(t) = \frac{1}{\tau}[0 \leq t \leq \tau]$
+- Элементы матрицы:
   $$A_{nk} = -\frac{1}{\tau}\begin{cases}
   \sqrt{(2n+1)(2k+1)}, & n > k \\
   n+1, & n = k \\
@@ -145,131 +145,131 @@ $$c_{n+1} = \bar{A}c_{n-1} + \bar{B}f_n$$
   \end{cases}$$
   $$B_n = \sqrt{2n+1}$$
 
-### Integration with Neural Networks
+### Интеграция с нейронными сетями
 
-HiPPO was integrated with RNNs by treating the expansion coefficients as additional context:
+HiPPO был интегрирован с RNN путем использования коэффициентов разложения как дополнительного контекста:
 
 $$\text{RNN}(h, [c, x])$$
 
-where $c_t = \bar{A}c_{t-1} + \bar{B}f_t$ represents HiPPO coefficients of $f(t) = w^T h_t$ (with learnable $w$).
+где $c_t = \bar{A}c_{t-1} + \bar{B}f_t$ представляет коэффициенты HiPPO для $f(t) = w^T h_t$ (с обучаемым $w$).
 
-### Experimental Results
+### Экспериментальные результаты
 
-HiPPO achieved state-of-the-art results on several benchmarks:
+HiPPO достиг результатов уровня SOTA на нескольких бенчмарках:
 
-- **Permuted MNIST**: SOTA performance on sequence image classification
-- **Trajectory Classification**: Robust performance across different sampling rates
-- **Mackey Glass Prediction**: Superior long-term prediction capabilities
-- **IMDB Sentiment**: Competitive performance on text classification
+- **Permuted MNIST**: SOTA производительность на классификации последовательностей изображений
+- **Классификация траекторий**: Робастная производительность при различных частотах дискретизации
+- **Предсказание Mackey Glass**: Превосходные возможности долгосрочного предсказания
+- **IMDB Sentiment**: Конкурентоспособная производительность на классификации текста
 
-The key advantages were:
-- Fast recurrent inference through ODE integration
-- Optimal memory compression via polynomial projections
-- Theoretical guarantees for approximation quality
+Ключевые преимущества:
+- Быстрый рекуррентный инференс через интегрирование ОДУ
+- Оптимальное сжатие памяти через полиномиальные проекции
+- Теоретические гарантии качества аппроксимации
 
 ---
 
-## State-Space Models: From Theory to Practice
+## State-Space Models: От теории к практике
 
-### Linear State-Space Layers (LSSL)
+### Линейные слои пространства состояний (LSSL)
 
-Building on HiPPO, LSSL transforms the theoretical framework into a practical neural network layer.
+Основываясь на HiPPO, LSSL трансформирует теоретический фреймворк в практический слой нейронной сети.
 
-**Sequence Mapping**
+**Отображение последовательностей**
 
-An SSM maps input sequence $u$ to output sequence $y$:
+SSM отображает входную последовательность $u$ в выходную последовательность $y$:
 $$\begin{align}
 x_t &= \bar{A} x_{t-1} + \bar{B} u_t \\
 y_t &= Cx_t + Du_t
 \end{align}$$
 
-where:
-- $\bar{A} \in \mathbb{R}^{N \times N}$, $\bar{B} \in \mathbb{R}^N$ (optionally trainable)
-- $C \in \mathbb{R}^{M \times N}$, $D \in \mathbb{R}^M$ (trainable)
+где:
+- $\bar{A} \in \mathbb{R}^{N \times N}$, $\bar{B} \in \mathbb{R}^N$ (опционально обучаемые)
+- $C \in \mathbb{R}^{M \times N}$, $D \in \mathbb{R}^M$ (обучаемые)
 
-**Recurrency as Convolution**
+**Рекуррентность как свертка**
 
-Unrolling the recurrence reveals that SSMs implement convolution:
+Разворачивание рекуррентности показывает, что SSM реализуют свертку:
 $$y_t = C(\bar{A})^t\bar{B}u_0 + C(\bar{A})^{t-1}\bar{B}u_1 + \ldots + C\bar{B}u_t$$
 
-This can be written as:
+Это может быть записано как:
 $$y = \mathcal{K}_L(\bar{A}, \bar{B}, C) * u + Du$$
 
-where the kernel is:
+где ядро:
 $$\mathcal{K}_L(A, B, C) = (CB, CAB, \ldots, CA^{L-1}B) \in \mathbb{R}^{M \times L}$$
 
-**Computational Complexity**
+**Вычислительная сложность**
 
-- **Training**: $O(L \log L)$ via FFT convolution
-- **Inference**: $O(L)$ via recurrence
+- **Обучение**: $O(L \log L)$ через FFT свертку
+- **Инференс**: $O(L)$ через рекуррентность
 
-This dual nature allows efficient parallel training while maintaining fast sequential inference.
+Эта двойственная природа позволяет эффективное параллельное обучение при сохранении быстрого последовательного инференса.
 
-### Parameterization Strategies
+### Стратегии параметризации
 
-**Tridiagonal Parameterization (LSSL)**
+**Трехдиагональная параметризация (LSSL)**
 
-The key insight is that HiPPO matrices can be represented as:
+Ключевая идея заключается в том, что матрицы HiPPO могут быть представлены как:
 $$A = P(D + T^{-1})Q$$
 
-where $D$, $P$, $Q$ are diagonal and $T$ is tridiagonal. This reduces parameters from $N^2$ to $6N$ while maintaining the theoretical properties.
+где $D$, $P$, $Q$ — диагональные, а $T$ — трехдиагональная. Это сокращает параметры с $N^2$ до $6N$, сохраняя теоретические свойства.
 
 **Normal Plus Low-Rank (S4)**
 
-S4 uses the parameterization:
+S4 использует параметризацию:
 $$A = V\Lambda V^* - PQ^*$$
 
-where $\Lambda$ is diagonal, $V$ is unitary, and $P, Q \in \mathbb{R}^{N \times r}$ are low-rank matrices. This enables efficient kernel computation through specialized algorithms.
+где $\Lambda$ — диагональная, $V$ — унитарная, а $P, Q \in \mathbb{R}^{N \times r}$ — матрицы низкого ранга. Это позволяет эффективное вычисление ядра через специализированные алгоритмы.
 
-**Diagonal Parameterization (DSS, S4D)**
+**Диагональная параметризация (DSS, S4D)**
 
-The simplest approach uses diagonal matrices:
+Самый простой подход использует диагональные матрицы:
 $$A = \text{diag}(\lambda_1, \ldots, \lambda_N)$$
 
-This allows extremely efficient kernel computation:
+Это позволяет чрезвычайно эффективное вычисление ядра:
 $$K_k = \sum_{i=0}^{N-1} C_i \bar{A}_i^k \bar{B}_i$$
 
-### Initialization Strategies
+### Стратегии инициализации
 
-All methods initialize from HiPPO matrices:
+Все методы инициализируются от матриц HiPPO:
 
-**S4D Initialization**
+**Инициализация S4D**
 - **S4D-Inv**: $A_{nn} = -\frac{1}{2} + i\frac{N}{\pi}\left(\frac{N}{2n+1} - 1\right)$
 - **S4D-Lin**: $A_{nn} = -\frac{1}{2} + i\pi n$
 
-### Experimental Results
+### Экспериментальные результаты
 
-**Long-Range Arena**: S4 achieved breakthrough results on very long sequence classification tasks, significantly outperforming previous methods.
+**Long-Range Arena**: S4 достиг прорывных результатов на задачах классификации очень длинных последовательностей, значительно превзойдя предыдущие методы.
 
-**Language Modeling**: Initial experiments showed competitive perplexity with Transformers while being 60x faster at generation.
+**Языковое моделирование**: Первоначальные эксперименты показали конкурентоспособную перплексию с Transformers, будучи при этом в 60 раз быстрее при генерации.
 
-**Audio Processing**: Direct processing of raw audio waveforms (16kHz sampling) without spectral preprocessing.
+**Обработка аудио**: Прямая обработка сырых аудиоволн (дискретизация 16кГц) без спектральной предобработки.
 
 ---
 
-## Mamba: Selective State Spaces
+## Mamba: Селективные пространства состояний
 
-### Motivation and Problem Statement
+### Мотивация и постановка проблемы
 
-While SSMs showed promise, they suffered from a fundamental limitation: **time-invariance**. The parameters $A$, $B$, $C$ remained constant regardless of input, making it difficult to selectively remember or forget information based on context.
+Хотя SSM показали перспективность, они страдали от фундаментального ограничения: **инвариантности по времени**. Параметры $A$, $B$, $C$ оставались постоянными независимо от входа, что затрудняло селективное запоминание или забывание информации на основе контекста.
 
-**Selective Copying Task**
+**Задача селективного копирования**
 
-Consider a task where the model must selectively copy tokens based on context. Traditional SSMs struggle because they cannot adapt their memory mechanism to the input content.
+Рассмотрим задачу, где модель должна селективно копировать токены на основе контекста. Традиционные SSM испытывают трудности, поскольку не могут адаптировать свой механизм памяти к содержимому входа.
 
-### Linear Attention Prelude
+### Предыстория: Linear Attention
 
-Before Mamba, Linear Attention showed how to approximate Transformer attention efficiently:
+До Mamba, Linear Attention показал, как эффективно аппроксимировать внимание Transformer:
 
-**Standard Attention**
+**Стандартное внимание**
 $$\text{Attention}(Q, K, V) = \text{softmax}(QK^T)V$$
 
-**Linear Attention Approximation**
-Replace $\text{sim}(q, k) = \exp(q^T k)$ with $\text{sim}(q, k) = \phi(q)^T \phi(k)$:
+**Аппроксимация Linear Attention**
+Заменим $\text{sim}(q, k) = \exp(q^T k)$ на $\text{sim}(q, k) = \phi(q)^T \phi(k)$:
 
 $$O_i = \frac{\phi(Q_i)^T \sum_{j=1}^i \phi(K_j)V_j^T}{\phi(Q_i)^T \sum_{j=1}^i \phi(K_j)}$$
 
-This enables recurrent computation:
+Это позволяет рекуррентное вычисление:
 $$\begin{align}
 S_i &= S_{i-1} + \phi(K_i)V_i^T \\
 Z_i &= Z_{i-1} + \phi(K_i)
@@ -277,133 +277,133 @@ Z_i &= Z_{i-1} + \phi(K_i)
 
 ### Hungry Hungry Hippos (H3)
 
-H3 bridged SSMs and language modeling by approximating attention with SSM components:
+H3 связал SSM и языковое моделирование, аппроксимируя внимание компонентами SSM:
 
-**H3 Layer**
+**Слой H3**
 $$Q \circ \text{SSM}_{\text{diag}}(\text{SSM}_{\text{shift}}(K) \circ V)$$
 
-This architecture:
-- Approximates Transformer attention using SSMs
-- Achieves competitive results on SuperGLUE
-- Uses Flash Convolution for efficient GPU utilization
+Эта архитектура:
+- Аппроксимирует внимание Transformer, используя SSM
+- Достигает конкурентоспособных результатов на SuperGLUE
+- Использует Flash Convolution для эффективного использования GPU
 
-### Mamba Architecture
+### Архитектура Mamba
 
-**Selective State Spaces**
+**Селективные пространства состояний**
 
-Mamba introduces input-dependent parameters:
+Mamba вводит входозависимые параметры:
 
 $$\begin{align}
 x_t &= \bar{A}(x_t) x_{t-1} + \bar{B}(x_t) u_t \\
 y_t &= C(x_t) x_t + D(x_t) u_t
 \end{align}$$
 
-where $A$, $B$, $C$ are now functions of the input $x_t$.
+где $A$, $B$, $C$ теперь являются функциями от входа $x_t$.
 
-**Implementation Details**
+**Детали реализации**
 
-- **Parameter Functions**: Simple linear projections from input
-- **Selective Mechanism**: Gates control information flow
-- **Efficient Implementation**: Custom CUDA kernels for memory hierarchy optimization
+- **Функции параметров**: Простые линейные проекции от входа
+- **Селективный механизм**: Ворота контролируют поток информации
+- **Эффективная реализация**: Пользовательские CUDA ядра для оптимизации иерархии памяти
 
-**Parallel Scan Algorithm**
+**Алгоритм параллельного сканирования**
 
-Since convolution is no longer available, Mamba uses parallel scan to parallelize the recurrence:
-- Enables $O(N)$ parallel computation during training
-- Maintains linear-time inference
-- Adapts cumulative sum algorithms to SSM recurrence
+Поскольку свертка больше недоступна, Mamba использует параллельное сканирование для распараллеливания рекуррентности:
+- Позволяет $O(N)$ параллельное вычисление во время обучения
+- Сохраняет линейно-временной инференс
+- Адаптирует алгоритмы кумулятивной суммы к рекуррентности SSM
 
-### Mamba Architecture Components
+### Компоненты архитектуры Mamba
 
-**Complete Architecture**
-1. **Input Projection**: Linear layer to hidden dimension
-2. **Selective SSM**: Input-dependent state-space computation
-3. **Gated MLP**: Modern activation functions (SiLU/Swish)
-4. **Output Projection**: Back to original dimension
+**Полная архитектура**
+1. **Проекция входа**: Линейный слой к скрытой размерности
+2. **Селективный SSM**: Входозависимое вычисление пространства состояний
+3. **Gated MLP**: Современные функции активации (SiLU/Swish)
+4. **Проекция выхода**: Обратно к исходной размерности
 
-**Memory Hierarchy Optimization**
+**Оптимизация иерархии памяти**
 
-Mamba implements sophisticated memory management:
-- **SRAM**: Fast on-chip memory for active computations
-- **HBM**: High-bandwidth memory for parameter storage
-- **Fused Operations**: Minimize memory transfers
+Mamba реализует сложное управление памятью:
+- **SRAM**: Быстрая память на чипе для активных вычислений
+- **HBM**: Высокопропускная память для хранения параметров
+- **Объединенные операции**: Минимизируют передачи памяти
 
-### Experimental Evaluation
+### Экспериментальная оценка
 
-**Short Context Tasks**
+**Задачи короткого контекста**
 
-On standard language modeling benchmarks (Harness library):
-- **Competitive Performance**: On par with Transformers on most tasks
-- **In-Context Learning**: Slightly weaker than Transformers
-- **Scaling**: Performance gap closes with larger datasets
+На стандартных бенчмарках языкового моделирования (библиотека Harness):
+- **Конкурентоспособная производительность**: Наравне с Transformers на большинстве задач
+- **Обучение в контексте**: Немного слабее Transformers
+- **Масштабирование**: Разрыв в производительности закрывается с большими датасетами
 
-**Long Context Tasks**
+**Задачи длинного контекста**
 
-- **Question Answering**: Competitive on long-context QA tasks
-- **Synthetic Tasks**: Strong performance on Phonebook and RULER benchmarks
-- **Extrapolation**: Better length extrapolation than Transformers
+- **Вопросно-ответные задачи**: Конкурентоспособность на задачах QA с длинным контекстом
+- **Синтетические задачи**: Сильная производительность на бенчмарках Phonebook и RULER
+- **Экстраполяция**: Лучшая экстраполяция длины, чем у Transformers
 
-**Hybrid Architectures**
+**Гибридные архитектуры**
 
-Combining Mamba with Transformer components:
-- **Best of Both Worlds**: Combines Mamba's efficiency with Transformer's capabilities
-- **Improved Performance**: Better results than pure Mamba
-- **Flexible Design**: Allows mixing different architectural components
+Комбинирование Mamba с компонентами Transformer:
+- **Лучшее из двух миров**: Объединяет эффективность Mamba с возможностями Transformer
+- **Улучшенная производительность**: Лучшие результаты, чем чистая Mamba
+- **Гибкий дизайн**: Позволяет смешивать различные архитектурные компоненты
 
-### Performance Characteristics
+### Характеристики производительности
 
-**Advantages**
-- **Fast Inference**: Linear-time complexity
-- **Memory Efficient**: Constant memory usage
-- **Length Extrapolation**: Better than Transformers
-- **Low Perplexity**: Competitive language modeling
+**Преимущества**
+- **Быстрый инференс**: Линейно-временная сложность
+- **Эффективность памяти**: Постоянное использование памяти
+- **Экстраполяция длины**: Лучше, чем Transformers
+- **Низкая перплексия**: Конкурентоспособное языковое моделирование
 
-**Limitations**
-- **In-Context Learning**: Weaker than Transformers
-- **Fuzzy Memory**: Less precise than attention mechanisms
-- **Prompt Sensitivity**: More sensitive to input formatting
-
----
-
-## Conclusion
-
-The evolution from HiPPO to Mamba represents a remarkable journey in sequence modeling, demonstrating how theoretical insights can be transformed into practical architectures that challenge the dominance of Transformers.
-
-### Key Contributions
-
-**HiPPO**: Established the theoretical foundation using optimal polynomial projections for recurrent memory, providing a principled approach to compressing historical information.
-
-**State-Space Models**: Bridged theory and practice by showing how recurrent dynamics can be implemented as efficient convolutions, enabling parallel training while maintaining sequential inference.
-
-**Mamba**: Introduced selective mechanisms that allow models to adapt their memory based on input content, achieving competitive performance with linear-time complexity.
-
-### Technical Insights
-
-1. **Mathematical Foundations**: Polynomial projections provide optimal compression of historical information
-2. **Dual Nature**: The recurrence-convolution duality enables efficient training and inference
-3. **Selective Mechanisms**: Input-dependent parameters are crucial for handling complex sequence patterns
-4. **Memory Hierarchy**: Careful attention to GPU memory organization is essential for practical efficiency
-
-### Future Directions
-
-The success of Mamba and related architectures suggests several promising directions:
-
-- **Hybrid Architectures**: Combining the strengths of different architectural paradigms
-- **Specialized Applications**: Tailoring architectures for specific domains (e.g., code generation)
-- **Scaling Laws**: Understanding how these models scale with parameters and data
-- **Theoretical Analysis**: Deeper understanding of why selective mechanisms work
-
-### Practical Implications
-
-For practitioners, State-Space Models offer:
-
-- **Efficiency**: Linear-time complexity for long sequences
-- **Flexibility**: Can be combined with other architectural components
-- **Scalability**: Better memory usage than Transformers for long contexts
-- **Competitive Performance**: Achieve results comparable to Transformers on many tasks
-
-The field continues to evolve rapidly, with new architectures building on these foundations. As we move forward, the principles established by HiPPO, refined through the State-Space Model family, and perfected in Mamba, will likely influence the next generation of sequence modeling architectures.
+**Ограничения**
+- **Обучение в контексте**: Слабее Transformers
+- **Размытая память**: Менее точная, чем механизмы внимания
+- **Чувствительность к промптам**: Более чувствительна к форматированию входа
 
 ---
 
-*This lecture has traced the theoretical foundations and practical implementations that led from polynomial projections to modern selective state-space models, demonstrating how mathematical insights can drive architectural innovation in deep learning.*
+## Заключение
+
+Эволюция от HiPPO к Mamba представляет замечательное путешествие в моделировании последовательностей, демонстрируя, как теоретические инсайты могут быть трансформированы в практические архитектуры, которые бросают вызов доминированию Transformers.
+
+### Ключевые вклады
+
+**HiPPO**: Установил теоретическую основу, используя оптимальные полиномиальные проекции для рекуррентной памяти, предоставив принципиальный подход к сжатию исторической информации.
+
+**State-Space Models**: Связали теорию и практику, показав, как рекуррентная динамика может быть реализована как эффективные свертки, позволяя параллельное обучение при сохранении последовательного инференса.
+
+**Mamba**: Ввел селективные механизмы, которые позволяют моделям адаптировать свою память на основе содержимого входа, достигая конкурентоспособной производительности с линейно-временной сложностью.
+
+### Технические инсайты
+
+1. **Математические основы**: Полиномиальные проекции обеспечивают оптимальное сжатие исторической информации
+2. **Двойственная природа**: Двойственность рекуррентность-свертка позволяет эффективное обучение и инференс
+3. **Селективные механизмы**: Входозависимые параметры критичны для обработки сложных паттернов последовательностей
+4. **Иерархия памяти**: Тщательное внимание к организации памяти GPU существенно для практической эффективности
+
+### Будущие направления
+
+Успех Mamba и связанных архитектур предполагает несколько перспективных направлений:
+
+- **Гибридные архитектуры**: Объединение сильных сторон различных архитектурных парадигм
+- **Специализированные приложения**: Адаптация архитектур для конкретных доменов (например, генерация кода)
+- **Законы масштабирования**: Понимание того, как эти модели масштабируются с параметрами и данными
+- **Теоретический анализ**: Более глубокое понимание того, почему селективные механизмы работают
+
+### Практические последствия
+
+Для практиков State-Space Models предлагают:
+
+- **Эффективность**: Линейно-временная сложность для длинных последовательностей
+- **Гибкость**: Могут быть объединены с другими архитектурными компонентами
+- **Масштабируемость**: Лучшее использование памяти, чем Transformers для длинных контекстов
+- **Конкурентоспособная производительность**: Достигают результатов, сравнимых с Transformers на многих задачах
+
+Поле продолжает быстро эволюционировать, с новыми архитектурами, строящимися на этих основах. По мере продвижения вперед принципы, установленные HiPPO, усовершенствованные через семейство State-Space Models и доведенные до совершенства в Mamba, вероятно, будут влиять на следующее поколение архитектур для моделирования последовательностей.
+
+---
+
+*Эта лекция проследила теоретические основы и практические реализации, которые привели от полиномиальных проекций к современным селективным моделям пространства состояний, демонстрируя, как математические инсайты могут стимулировать архитектурные инновации в глубоком обучении.*
