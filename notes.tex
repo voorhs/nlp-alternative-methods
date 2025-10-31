@@ -91,7 +91,7 @@ $$\langle f, g \rangle = \int_{-1}^1 f(x)g(x) w(x) dx,$$
 \centering
 \small
 \renewcommand{\arraystretch}{2.5}
-\begin{tabular}{m{0.26\linewidth}|>{\centering\arraybackslash}m{0.15\linewidth}|>{\centering\arraybackslash}m{0.18\linewidth}|>{\centering\arraybackslash}m{0.35\linewidth}}
+\begin{tabular}{m{0.26\linewidth}|>{\centering\arraybackslash}m{0.12\linewidth}|>{\centering\arraybackslash}m{0.15\linewidth}|>{\centering\arraybackslash}m{0.3\linewidth}}
 \textbf{Название} & \textbf{Простр.} & \textbf{Весовая ф-я} & \textbf{Явная формула} \\
 \hline
 Тригонометрический ряд & $L^2[0, 2\pi]$ & $w(x)=1$ & $\displaystyle\{\exp(inx)\}_{i=-\infty}^{+\infty}$ \\
@@ -271,7 +271,7 @@ $$c_{k+1} = \bar{A}c_{k-1} + \bar{B}f_k$$
 где:
 \begin{itemize}
 \item $\bar{A} \in \mathbb{R}^{N \times N}$, $\bar{B} \in \mathbb{R}^N$ инициализируются из HiPPO матриц,
-\item $C \in \mathbb{R}^{M \times N}$, $D \in \mathbb{R}^M$ --- обучаемые параметрв.
+\item $C \in \mathbb{R}^{M \times N}$, $D \in \mathbb{R}^M$ --- обучаемые параметры.
 \end{itemize}
 
 В теории оптимального управления подобные системы уравнений называют моделями пространства состояний --- state-space model (SSM).
@@ -331,11 +331,6 @@ $$A = V\Lambda V^* - PQ^*$$
 
 где $\Lambda$ — диагональная, $V$ — унитарная, а $P, Q \in \mathbb{R}^{N \times r}$ — матрицы низкого ранга. Это позволяет эффективное вычисление ядра через специализированные алгоритмы.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\textwidth]{figures/s4-kernel.png}
-\end{figure}
-
 \textbf{Диагональная параметризация (DSS, S4D)}
 
 Самый простой подход использует диагональные матрицы:
@@ -374,7 +369,15 @@ where $P\in\mathbb{C}^{N\times L}$ such that $P_{ij}=\lambda_ij\cdot dt$.
 
 \subsection{Linear Attention}
 
-До Mamba, Linear Attention показал, как эффективно аппроксимировать внимание Transformer:
+\begin{wrapfigure}[10]{r}{0.15\textwidth}
+  \vspace{-1\baselineskip}
+  \centering
+  \includegraphics[width=1\linewidth]{figures/h3-layer.png}
+  \caption{H3.}
+  \label{fig:h3}
+\end{wrapfigure}
+
+До Mamba, Linear Attention показал, как эффективно аппроксимировать внимание трансформера:
 
 Механизм внимания $\text{softmax}(QK^T)V$ можно расписать следующим образом:
 $$
@@ -387,30 +390,23 @@ $$
 
 Определим величины $S_i,Z_i$:
 $$
-O_i^T=\frac{\phi(Q_i)^T\overbrace{\sum_{j=1}^i\phi(K_j)V_j^T}^{S_i}}{\phi(Q_i)^T\underbrace{\sum_{j=1}^i\phi(K_j)}_{Z_i}}=\frac{\phi(Q_i)^TS_i}{\phi(Q_i)^TZ_i}.
+O_i^T=\frac{\phi(Q_i)^T\overbrace{\sum_{j=1}^i\phi(K_j)V_j^T}^{S_i}}{\phi(Q_i)^T\underbrace{\sum_{j=1}^i\phi(K_j)}_{Z_i}}=\frac{\phi(Q_i)^TS_i}{\phi(Q_i)^TZ_i}
+\Rightarrow 
+\begin{cases}
+  S_i&=S_{i-1}+\phi(K_i)V_i^T,\\
+  Z_i&=Z_{i-1}+\phi(K_i).
+\end{cases}
 $$
 
-Получили рекуррентный инференс:
-\begin{align*}
-S_i&=S_{i-1}+\phi(K_i)V_i^T,\\
-Z_i&=Z_{i-1}+\phi(K_i).
-\end{align*}
+Получили рекуррентный инференс.
 
 \subsection{Hungry Hungry Hippos (H3)}
-
-\begin{wrapfigure}[17]{r}{0.2\textwidth}
-  \vspace{-1\baselineskip}
-  \centering
-  \includegraphics[width=1\linewidth]{figures/h3-layer.png}
-  \caption{Слой H3.}
-  \label{fig:h3}
-\end{wrapfigure}
 
 H3 связал SSM и языковое моделирование, аппроксимируя внимание компонентами SSM:
 
 $$Q \circ \text{SSM}_{\text{diag}}(\text{SSM}_{\text{shift}}(K) \circ V)$$
 
-Эта архитектура аппроксимирует внимание Transformer средствами SSM (рисунок \ref{fig:h3}). Для эффективности авторы опираются на Flash Convolution для правильной утилизации GPU.
+Эта архитектура аппроксимирует внимание трансформера средствами SSM (рисунок \ref{fig:h3}). Для эффективности авторы опираются на Flash Convolution для правильной утилизации GPU.
 
 \subsection{Селективные модели пространства состояний}
 
@@ -430,7 +426,7 @@ y_t &= C(x_t) x_t + D(x_t) u_t
 \label{fig:mamba-algo}
 \end{figure}
 
-Параметры $A$, $B$, $C$ задаются простыми линейными проекциями от входа; вводится селективный механизм (ворота), управляющий потоком информации; реализация опирается на кастомные CUDA‑ядра, учитывающие иерархию памяти (рисунок \ref{fig:mamba-cuda}).
+Параметры $A$, $B$, $C$ задаются простыми линейными проекциями от входа; вводится селективный механизм, управляющий потоком информации; реализация опирается на кастомные CUDA‑ядра, учитывающие иерархию памяти (рисунок \ref{fig:mamba-cuda}).
 
 \begin{figure}[!htb]
 \centering
@@ -439,8 +435,7 @@ y_t &= C(x_t) x_t + D(x_t) u_t
 \label{fig:mamba-cuda}
 \end{figure}
 
-
-Поскольку свёртка в явном виде недоступна, для распараллеливания рекуррентности используется параллельное сканирование: оно обеспечивает $O(N)$‑параллелизм на обучении, сохраняет линейно‑временной инференс и адаптирует алгоритмы кумулятивной суммы к динамике SSM.
+Поскольку свёртка в явном виде недоступна, для распараллеливания рекуррентности используется алгоритм parallel scan, который обычно в алгоритмах используют для вычисления кумулятивной суммы.
 
 \subsection{Архитектура Mamba}
 
@@ -453,38 +448,31 @@ y_t &= C(x_t) x_t + D(x_t) u_t
 \label{fig:mamba-architecture}
 \end{figure}
 
-\subsection{Экспериментальная оценка}
+\subsection{Сравнение с трансформерами}
 
-\textbf{Задачи длинного контекста}
-
-На QA с длинными контекстами и в синтетических тестах (Phonebook, RULER) модель дает сопоставимое качество и лучше экстраполирует длину, чем Transformers.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\textwidth]{figures/pure-mamba-synthetic.png}
-\end{figure}
-
-\textbf{Гибридные архитектуры}
-
-Комбинирование с компонентами Transformer даёт «лучшее из двух миров»: эффективность Mamba сочетается с возможностями внимания, что обеспечивает более высокое качество и гибкий дизайн.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\textwidth]{figures/hybrid-mamba-extrapolation.png}
-\caption{}
-\end{figure}
-
-\subsection{Характеристики производительности}
-
-Mamba обеспечивает линейно‑временной инференс и постоянное использование памяти, хорошо экстраполирует длину и демонстрирует сопоставимую перплексию. Ограничения касаются in‑context learning (уступает Transformers), меньшей точности «памяти» по сравнению с вниманием и повышенной чувствительности к формату входа.
+К сожалению, из-за своей рекуррентной природы Mamba все равно плохо справляется с задачами, требующими точного запоминания контекста. Mamba обеспечивает линейно‑временной инференс, хорошо экстраполирует длину входной последовательности и демонстрирует сопоставимую перплексию (рисунок \ref{fig:rejected-mamba}). Однако Mamba слабо поддается in‑context learning, и страдает от проблемы нечеткой памяти (рисунок \ref{fig:mamba-fuzzy}).
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.8\textwidth]{figures/denied-mamba.png}
-\caption{Результаты основного эксперимента из оригинальной статьи Mamba.}
-\label{fig:rejected-mamba}
+\includegraphics[width=0.8\textwidth]{figures/pure-mamba-synthetic.png}
+\caption{Проблема нечеткой памяти в Mamba (fuzzy memory).}
+\label{fig:mamba-fuzzy}
 \end{figure}
 
-Оригинальную статью Mamba реджектнули с ICML. Сможете ли вы понять по таблице \ref{fig:rejected-mamba}, почему?
+Комбинирование Mamba с трансформером даёт «лучшее из двух миров»: эффективность Mamba сочетается с возможностями внимания, что обеспечивает лучшее качество (рисунок \ref{fig:hybrid-mamba}).
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.8\textwidth]{figures/hybrid-mamba-extrapolation.png}
+\caption{Проблема нечеткой памяти (fuzzy memory) в Mamba решается в гибридной архитектуре, которая чередует Mamba слои со слоями трансформера.}
+\label{fig:hybrid-mamba}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/denied-mamba.png}
+\caption{Результаты основного эксперимента из оригинальной статьи Mamba. Оригинальную статью Mamba реджектнули с ICML 2024. Сможете ли вы предположить, почему? Комментарии рувьюеров тут: \url{https://openreview.net/forum?id=AL1fq05o7H}}
+\label{fig:rejected-mamba}
+\end{figure}
 
 \end{document}
