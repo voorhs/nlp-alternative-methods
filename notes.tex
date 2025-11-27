@@ -54,6 +54,9 @@
 % tables
 \usepackage{array}
 
+\DeclareMathOperator{\diag}{diag}
+
+
 \begin{document}
 
 \maketitle
@@ -368,7 +371,7 @@ where $P\in\mathbb{C}^{N\times L}$ such that $P_{ij}=\lambda_ij\cdot dt$.
 \label{fig:synthetic-head}
 \end{figure}
 
-\subsection{Linear Attention}
+\subsection{Linear Attention}\label{sec:linear_att}
 
 \begin{wrapfigure}[10]{r}{0.15\textwidth}
   \vspace{-1\baselineskip}
@@ -471,6 +474,88 @@ y_t &= C(x_t) x_t + D(x_t) u_t
 
 В настоящий материал не включен рассказ про Mamba-2 \cite{dao2024transformersssmsgeneralizedmodels} и Mamba-3 \cite{anonymous2025mamba}.
 
+\section{Линейные трансформеры}
+
+Одним из многообещающих направлений развития альтернативных подходов являются так называемые линейные трансформеры. Вспомним идею линейного внимания, описанную в разделе \ref{sec:linear_att}. Если в формуле механизма внимания заменить $\text{sim}(q,k)=\text{exp}(q^Tk)$ на $\text{sim}(q,k)=\phi(q)^T\phi(k)$, то получаем рекуррентный инференс (линейный по времени относительно длины последовательности):
+\begin{align*}
+  S_i&=S_{i-1}+\phi(K_i)V_i^T,\\
+  Z_i&=Z_{i-1}+\phi(K_i).
+\end{align*}
+
+Эта идея развивалась, и сегодня мы имеем целый ряд LLM архитектур, основанных на линейном аттеншене \cite{yang2025parallelizinglineartransformersdelta, kimiteam2025kimilinearexpressiveefficient, qwen32next}. В целях краткости рассказа перечислим особенности этих архитектур тремя ключевыми апгрейдами.
+
+\textbf{Апгрейд 0: Без нелинейности.} Во-первых, в формулах линейного трансформера можно убрать функцию $\phi(\cdot)$ (TODO cide):
+\begin{align*}
+  S_i&=S_{i-1}+K_iV_i^T,\\
+  Z_i&=Z_{i-1}+K_i.
+\end{align*}
+Более того, некоторые работы показывают, что от знаменателя $Z_i$ тоже можно избавиться, поскольку он вносит численную нестабильность. Тогда инференс станет линейным в смысле преобразований, а не только всмысле времени. Обоснование у такого подхода в первую эмпирическое. Однако полученную формулу $S_i=S_{i-1}+K_iV_i^T$ можно обосновать еще теоретически. Смысл в том, что она эквивалентна градиентной оптимизации следующего функционала:
+\begin{equation*}
+\mathcal{L}_i=-\langle SK_i,V_i \rangle.
+\end{equation*}
+То есть можно сказать, что в ходе рекуррентного инференса мы используем память $S$ как некоторый линейный оператор для предсказания $V_i$ с помощью $K_i$. Обучение такого оператора происходит засчет минимизации скалярного произведения между предсказанием и таргетом.
+
+\textbf{Апгрейд 1: Delta-правило.} Вместо $\mathcal{L}_i=-\langle SK_i,V_i \rangle$ можно использовать MSE-лосс:
+\begin{equation*}
+  \mathcal{L}_i=-{1\over 2}\|SK_i-V_i\|^2.
+\end{equation*}
+Тогда оптимизация будет выглядеть следующим образом:
+\begin{align*}
+S_i &= S_{i-1} - \beta_i\nabla\mathcal{L}_{i-1}\\
+&= S_{i-1}− \beta_i(S_{i-1}K_i− V_i)K_i
+\end{align*}
+Поскольку здесь возникает разница между предсказанием и таргетом, эту формулу называют delta-rule. В качестве $\beta_i$ берут $\beta_i=\sigma(W_\beta X_i)$ --- обучаемую нелинейную функцию (с сигмоидой). Это правило интерпретируют как более точное обновление рекуррентной памяти $S$. Более того, существуют эффективные hardware-aware алгоритмы, которые позволяют параллелить обучение по этим формулам \cite{yang2025parallelizinglineartransformersdelta}.
+
+\textbf{Апгрейд 2: Gated attention}. В архитектуру современных трансформеров все чаще добавляют так называемый gated attention вместо обычного механизма внимания \cite{qiu2025gatedattentionlargelanguage}. Прием заключается в добавлении специальной нелинейности после обычного атеншена перед конкатенацией выходов с разных голов (рис. \ref{fig:gated-attention}). Необходимость в этой дополнительной нелинейности преимущественно объясняется эффектом под названием attention sink --- когда внимание на начальные токены последовательности доминируют для всех токенов последовательности, как далеко от начала они бы не находились (рис. \ref{fig:attention-sink}).
+
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/gated-attention.png}
+  \caption{Результаты основного эксперимента из статьи Gated Attention \cite{qiu2025gatedattentionlargelanguage}.}
+  \label{fig:gated-attention}
+\end{figure}
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/attention-sink.png}
+  \caption{Эффект attention sink из статьи Gated Attention \cite{qiu2025gatedattentionlargelanguage}.}
+  \label{fig:attention-sink}
+\end{figure}
+
+\subsection{Примеры}
+
+\textbf{Gated DeltaNet} \cite{yang2025gateddeltanetworksimproving}. Это одна из первых работ, соединивших все перечисленные апгрейды. Дополнительно авторы ввели скалярный forget gate для рекуррентной памяти:
+$$
+S_i = \alpha_i(I−\beta_i K_i K_i^T)S_{i−1} + \beta_i K_i V_i^T.
+$$ 
+
+\textbf{Kimi Linear} \cite{kimiteam2025kimilinearexpressiveefficient}. Во-первых, в этой работе скалярный $\alpha_i$ заменили на диагональную матрицу $\diag(\vec\alpha_i)$:
+$$
+S_i = I−\beta_i K_i K_i^T\diag (\vec\alpha_i)S_{i−1} + \beta_i K_i V_i^T.
+$$
+Во-вторых, авторы детальнее проработали архитектуру всей модели, добавив свёртки и RMSProp-нормирование голов (рис. \ref{fig:kimi-arch}).
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/kimi-arch.png}
+  \caption{Архитектура Kimi Linear \cite{kimiteam2025kimilinearexpressiveefficient}.}
+  \label{fig:kimi-arch}
+\end{figure}
+
+\textbf{Qwen-3.2-next} \cite{qwen32next}. Эта модель очень похожа на Kimi Linear и по большей части отличается лишь тем, что не целиком отказывается от стандартного внимания взамен на линейное, а комбинирует оба подхода, образуя гибридную архитектуру (рис. \ref{fig:qwen-arch}).
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/qwen-arch.png}
+  \caption{Архитектура Qwen-3.2-next \cite{qwen32next}.}
+  \label{fig:qwen-arch}
+\end{figure}
+
+\section{RWKV}
+
+- еще раз почитать статью
+
 \newpage
 \printbibliography
 
@@ -482,7 +567,5 @@ y_t &= C(x_t) x_t + D(x_t) u_t
 \caption{Результаты основного эксперимента из оригинальной статьи Mamba~\cite{gu2024mambalineartimesequencemodeling}. Оригинальную статью Mamba реджектнули с ICML 2024. Сможете ли вы предположить, почему? Комментарии рувьюеров тут: \url{https://openreview.net/forum?id=AL1fq05o7H}}
 \label{fig:rejected-mamba}
 \end{figure}
-
-
 
 \end{document}
