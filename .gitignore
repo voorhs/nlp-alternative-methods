@@ -8,6 +8,7 @@
 *.toc
 *.xdv
 .texlive2025
+.texlive2026
 *.bbl
 *.bcf
 *.blg
